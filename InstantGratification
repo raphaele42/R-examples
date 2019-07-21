@@ -1,0 +1,70 @@
+#Load libraries
+library(readr) #for write_csv
+library(MASS) #for qda
+
+#Import data
+IGTrainData <- read.csv("../input/train.csv")
+IGTestData <- read.csv("../input/test.csv")
+
+#Split id and features, so id is not used as a prediction parameter
+TrainId <- IGTrainData[ ,1]
+TrainFeatures <- IGTrainData[ ,-1]
+TestId <- IGTestData[ ,1]
+TestFeatures <- IGTestData[ ,-1]
+
+#Make sure dependent variable is a factor
+TrainFeatures$target <- as.factor(TrainFeatures$target)
+
+#Dataframe to store predictions to be submitted
+PredSubmit <- rep(0,nrow(IGTestData))
+u <- 0
+
+#data is actually 512 set of data artificially generated and concatenated together into one large data set
+#each sub data set has a different value for variable wheezy.copper.turtle.magic
+#the model will be fit on each of the 512 sub data set
+for(i in 0:511)
+{
+    SubTrainFeatures <- TrainFeatures[TrainFeatures$wheezy.copper.turtle.magic == i, ]    
+    SubTestFeatures <- TestFeatures[TestFeatures$wheezy.copper.turtle.magic ==i, ] 
+    
+    #Remove the feature wheezy.copper.turtle.magic so it is not used for training the model
+    SubTrainFeatures <- SubTrainFeatures[ , -which(names(SubTrainFeatures) %in% c("wheezy.copper.turtle.magic"))]
+    SubTestFeatures <- SubTestFeatures[ , -which(names(SubTestFeatures) %in% c("wheezy.copper.turtle.magic"))]
+   
+    #Adding a fake col to test data so we can do a rbind with train data
+    target <- rep(0,nrow(SubTestFeatures))
+    SubTestFeatures <- data.frame(SubTestFeatures, target)
+    
+    #colnames(SubTestFeatures[256]) <- target
+    FullSet <- rbind(SubTrainFeatures,SubTestFeatures)
+    LengthTrain <- nrow(SubTrainFeatures)
+    target <- FullSet[1:LengthTrain ,256]
+    
+    #Change the col name so they can be used as variables names by qda
+    levels(target) <- c("No", "Yes")
+    
+    #Select features with variance >= 1.5
+    #Because QDA won't handle singular variance variables and because for each subset, only a few variables
+    #are significant
+    #Compute variance for each variable ie col of the full set and store in VarVariances
+    VarVariances<-apply(FullSet, 2, var)
+    
+    #Store variables for which variance is >= 1.5 in KeepVarVariances
+    KeepVarVariances <- FullSet[ ,which(VarVariances>=1.5)]
+    
+    #Separate back full set into train and test sets
+    SubTrainFeatures <- KeepVarVariances[1:nrow(SubTrainFeatures), ]
+    SubTestFeatures <- KeepVarVariances[(LengthTrain+1) : nrow(FullSet), ]  
+    
+    #train QDA model on training data
+    Mod_IGT_QDA <- qda(target ~ . , data = SubTrainFeatures)
+    
+    #predict on test data + store resulting prob in PredSubmit for the relevant rows
+    PredSubmit[TestFeatures$wheezy.copper.turtle.magic == i] <-  predict(Mod_IGT_QDA, SubTestFeatures ,type="prob")$posterior[,1] 
+    
+}
+
+#Generate the submission file
+Submission <- data.frame(TestId, PredSubmit)
+colnames(Submission) <- c("id","target")
+write_csv(Submission,"Submission.csv")
