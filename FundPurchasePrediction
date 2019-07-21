@@ -1,0 +1,317 @@
+#Predicting purchase of long-term deposit funds
+#########################################
+
+##################################################
+# 0 - Environnement prep, loading data and packages
+###################################################
+
+rm(list=ls()) #Cleaning environment
+set.seed(42) #Setting seed of random number generator
+BankData <- read.csv("bank.csv") # Loading data
+#Package for performance measures
+library(ROCR)
+#install.packages("pROC")
+library(pROC)
+
+################################################
+# 1 - Data preparation
+################################################
+
+#Ensuring that categorical data is coded as factor
+is.factor(BankData$y)
+is.factor(BankData$job)
+is.factor(BankData$marital)
+is.factor(BankData$education)
+is.factor(BankData$default)
+is.factor(BankData$housing)
+is.factor(BankData$loan)
+is.factor(BankData$month)
+is.factor(BankData$poutcome)
+
+# Encoding response variable: yes as '1' and no as '0'
+levels(BankData$y) <- c("0","1")
+
+################################################
+# 2 - Exploring the data
+################################################
+
+#Summary stats
+summary(BankData)
+
+#Table for response variable
+table(BankData$y)
+
+# Ratio of response variables = yes
+y.rate <- sum(BankData$y=="1") / sum(table(BankData$y))
+cat("Rate of response = y:", y.rate)
+
+################################################
+# 3 - Running the logistic regression with all parameters to determine which
+# parameters to include in final model
+################################################
+
+fit.log <- glm(y~., family="binomial", data=BankData)
+summary(fit.log)
+
+################################################
+# 4 - Running the selected models using a k-fold to determine best accuracy
+################################################
+
+K <- 10 #Assigning k value
+N <- nrow(BankData) # Setting variable for row number in the data
+
+#Splitting data into training and test date using k-fold cross validation
+
+# defining folds
+folds <- rep(1:K,ceiling(N/K))
+folds <- sample(folds)
+folds <- folds[1:N]
+#Setting up result matrix to store results for each model
+res.log.sig<-matrix(NA,K,1)
+colnames(res.log.sig)<-c("accuracy-sig")
+res.log.sig.age<-matrix(NA,K,1)
+colnames(res.log.sig.age)<-c("accuracy-sig.age")
+res.log.sig.housing<-matrix(NA,K,1)
+colnames(res.log.sig.housing)<-c("accuracy-sig.housing")
+# Looping to drop each fold in turn
+iterlim <- K
+for (iter in 1:iterlim)
+{
+ indtrain <- (1:N)[!(folds==iter)] #training data
+ indtest <- setdiff(1:N,indtrain) #test data
+
+####### model 1 ##############
+# significant parameters only
+
+#Fitting logistic regression model to only the training data
+ fit.log.sig <- glm(y ~ job + marital + loan + month + campaign + poutcome,
+family="binomial", data=BankData, subset=indtrain)
+ 
+#Predicting classification on all the data
+ pred.log.sig <- predict(fit.log.sig,type="response",newdata=BankData)
+ 
+#Making sure response variable is formatted as 0/1
+ for(i in 1:N)
+ {
+ if(pred.log.sig[i]>0.5) #if the predicted probability is > 0.5
+ #classify observation i as 'being in the low birth weight class'1' or 'yes' response
+ pred.log.sig[i]=1
+ else
+ pred.log.sig[i]=0
+ }
+ #Adding the accuracy rate to the result matrix
+ res.log.sig[iter,1] <- sum(pred.log.sig[indtest]==BankData$y[indtest])/length(indtest)
+ 
+####### end model 1 ##############
+
+####### model 2 ##############
+# significant parameters and interaction between age and job
+
+#Fitting logistic regression model to only the training data
+ fit.log.sig.age <- glm(y ~ job * age + marital + loan + month + campaign + poutcome,
+family="binomial", data=BankData, subset=indtrain)
+ 
+ #Predicting classification on all the data
+ pred.log.sig.age <- predict(fit.log.sig.age,type="response",newdata=BankData)
+ 
+ #Making sure response variable is formatted as 0/1
+ for(i in 1:N)
+ {
+ if(pred.log.sig.age[i]>0.5) #if the predicted probability is > 0.5
+ #classify observation i as 'being in the low birth weight class'1' or 'yes' response
+ pred.log.sig.age[i]=1
+ else
+ pred.log.sig.age[i]=0
+ }
+ #Adding the accuracy rate to the result matrix
+ res.log.sig.age[iter,1] <-
+sum(pred.log.sig.age[indtest]==BankData$y[indtest])/length(indtest)
+
+####### end model 2 ##############
+ 
+####### model 3 ##############
+# significant parameters and interaction between marital status and housing
+ 
+#Fitting logistic regression model to only the training data
+ fit.log.sig.housing <- glm(y ~ job * age + housing * marital + loan + month + campaign +
+poutcome, family="binomial", data=BankData, subset=indtrain)
+
+#Predicting classification on all the data
+ pred.log.sig.housing <- predict(fit.log.sig.housing,type="response",newdata=BankData)
+
+#Making sure response variable is formatted as 0/1
+ for(i in 1:N)
+ {
+ if(pred.log.sig.housing[i]>0.5) #if the predicted probability is > 0.5
+ #classify observation i as 'being in the low birth weight class'1' or 'yes' response
+ pred.log.sig.housing[i]=1
+ else
+ pred.log.sig.housing[i]=0
+ }
+ #Adding the accuracy rate to the result matrix
+ res.log.sig.housing[iter,1] <-
+sum(pred.log.sig.housing[indtest]==BankData$y[indtest])/length(indtest)
+
+####### end model 3 ##############
+} #iter
+
+#Checking the accuracy rate summary statistics for each model########
+cat("Accuracy summary for model 1, significant parameters only")
+apply(res.log.sig,2,summary)
+cat("Accuracy summary for model 2, significant parameters and effect of age")
+apply(res.log.sig.age,2,summary)
+cat("Accuracy summary for model 3, significant parameters and effect of housing loan")
+apply(res.log.sig.housing,2,summary)
+#############
+
+############################################
+# 5 Computing performance indicators of the 3 models
+############################################
+
+#Fitting model 1 to all the data
+fit.log.sig <- glm(y~ job + marital + loan + month + campaign + poutcome, family="binomial", data=BankData)
+summary(fit.log.sig)
+
+# Classifying all the data using model 1
+pred.log.sig <- predict(fit.log.sig,type="response",newdata=BankData)
+
+#Fitting model 2 to all the data
+fit.log.sig.age <- glm(y~ job * age + marital + loan + month + campaign + poutcome, family="binomial", data=BankData)
+summary(fit.log.sig.age)
+
+# Classifying all the data using model 2
+pred.log.sig.age <- predict(fit.log.sig.age,type="response",newdata=BankData)
+
+#Fitting model 3 to all the data
+fit.log.sig.housing <- glm(y~ job * age + housing * marital + loan + month + campaign +
+poutcome, family="binomial", data=BankData)
+summary(fit.log.sig.housing)
+
+# Classifying all the data using model 3
+pred.log.sig.housing <- predict(fit.log.sig.housing,type="response",newdata=BankData)
+
+##################
+# ROC and AUC
+###################
+# computing prediction object for model 1
+predobj.sig <- prediction(pred.log.sig,BankData$y)
+#ROC curve data for model 1
+perf.sig.roc <- performance(predobj.sig,"tpr","fpr")
+
+# computing prediction object for model 2
+predobj.sig.age <- prediction(pred.log.sig.age,BankData$y)
+#ROC curve data for model 2
+perf.sig.age.roc <- performance(predobj.sig.age,"tpr","fpr")
+
+# computing prediction object for model 3
+predobj.sig.housing <- prediction(pred.log.sig.housing,BankData$y)
+#ROC curve data for model 3
+perf.sig.housing.roc <- performance(predobj.sig.housing,"tpr","fpr")
+
+#ROC curves
+#Plotting the ROC curves using the performance object
+plot(perf.sig.age.roc, col = "red", main = "ROC curve for each model")
+legend("bottomright", legend = c("Model 1", "Model 2", "Model 3"), pch = c("_", "_", "_"),
+col = c("blue", "red", "green"))
+plot(perf.sig.housing.roc, add = TRUE, col = "green")
+plot(perf.sig.roc, add = TRUE, col = "blue")
+segments(-3,-3,3,3)
+
+#Computing the area under the ROC curve
+#Model 1
+roc_obj.sig <- roc(BankData$y, pred.log.sig)
+auc(roc_obj.sig)
+#Model 2
+roc_obj.age <- roc(BankData$y, pred.log.sig.age)
+auc(roc_obj.age)
+#Model 3
+roc_obj.housing <- roc(BankData$y, pred.log.sig.housing)
+auc(roc_obj.housing)
+########################
+
+#######################
+# Confusion Matrix
+# Encoding predicted responses as 0 and 1 for predicted data for the 3 models
+for(i in 1:N)
+{
+ #Model 1
+ if(pred.log.sig[i]>0.5) #if the predicted probability is > 0.5
+ #classify observation i as 'yes' response
+ pred.log.sig[i]=1
+ else
+ pred.log.sig[i]=0
+ #Model 2
+ if(pred.log.sig.age[i]>0.5) #if the predicted probability is > 0.5
+ #classify observation i as 'yes' response
+ pred.log.sig.age[i]=1
+ else
+ pred.log.sig.age[i]=0
+ #Model 3
+ if(pred.log.sig.housing[i]>0.5) #if the predicted probability is > 0.5
+ #classify observation i as 'yes' responsee
+ pred.log.sig.housing[i]=1
+ else
+ pred.log.sig.housing[i]=0
+}
+
+#Generating the confusion matrix for model 1
+confusion.sig <- table(pred.log.sig, BankData$y)
+print("Confusion matrix for model 1")
+confusion.sig
+#Sensitivity TP/(TP+FN)
+sensitivity.sig <- confusion.sig[4] / (confusion.sig[4] + confusion.sig[2])
+cat("Sensitivity model 1: ", sensitivity.sig)
+#Specificity TN/(FP+TN)
+specificity.sig <- confusion.sig[1] / (confusion.sig[1] + confusion.sig[3])
+cat("Specificity model 1: ", specificity.sig)
+# False discovery rate FP / (FP+TP)
+false.disc.sig <- confusion.sig[3] / (confusion.sig[3] + confusion.sig[4])
+cat("False discovery model 1: ", false.disc.sig)
+# False positive rate FP / (FP+TN)
+false.posit.sig <- confusion.sig[3] / (confusion.sig[3] + confusion.sig[1])
+cat("False positive model 1: ", false.posit.sig)
+
+#Generating the confusion matrix for model 2
+confusion.sig.age <- table(pred.log.sig.age, BankData$y)
+print("Confusion matrix for model 2")
+confusion.sig.age
+#Sensitivity TP/(TP+FN)
+sensitivity.sig.age <- confusion.sig.age[4] / (confusion.sig.age[4] + confusion.sig.age[2])
+cat("Sensitivity model 2: ", sensitivity.sig.age)
+#Specificity TN/(FP+TN)
+specificity.sig.age <- confusion.sig.age[1] / (confusion.sig.age[1] + confusion.sig.age[3])
+cat("Specificity model 2: ", specificity.sig.age)
+# False discovery rate FP / (FP+TP)
+false.disc.sig.age <- confusion.sig.age[3] / (confusion.sig.age[3] + confusion.sig.age[4])
+cat("False discovery model 2: ", false.disc.sig.age)
+# False positive rate FP / (FP+TN)
+false.posit.sig.age <- confusion.sig.age[3] / (confusion.sig.age[3] + confusion.sig.age[1])
+cat("False positive model 2: ", false.posit.sig.age)
+
+#Generating the confusion matrix for model 3
+confusion.sig.housing <- table(pred.log.sig.housing, BankData$y)
+print("Confusion matrix for model 3")
+confusion.sig.housing
+#Sensitivity TP/(TP+FN)
+sensitivity.sig.housing <- confusion.sig.housing[4] / (confusion.sig.housing[4] +
+confusion.sig.housing[2])
+cat("Sensitivity model 3: ", sensitivity.sig.housing)
+#Specificity TN/(FP+TN)
+specificity.sig.housing <- confusion.sig.housing[1] / (confusion.sig.housing[1] +
+confusion.sig.housing[3])
+cat("Specificity model 3: ", specificity.sig.housing)
+# False discovery rate FP / (FP+TP)
+false.disc.sig.housing <- confusion.sig.housing[3] / (confusion.sig.housing[3] +
+confusion.sig.housing[4])
+cat("False discovery model 3: ", false.disc.sig.housing)
+# False positive rate FP / (FP+TN)
+false.posit.sig.housing <- confusion.sig.housing[3] / (confusion.sig.housing[3] +
+confusion.sig.housing[1])
+cat("False positive model 3: ", false.posit.sig.housing)
+
+##################
+# Running model 4 on all the data and looking at the output
+#################
+fit.log.sig.housing <- glm(y ~ job * age + housing * marital + loan + month + campaign +
+poutcome, family="binomial", data=BankData)
+summary(fit.log.sig.housing)
