@@ -1,259 +1,161 @@
-##### Class prediction using multinom, caret package #####
-# Predicting the value of the Result_Type variables: 
-# Values can be PASS, Defect 1, Defect 2, Defect 3 or Defect 4
+##### Accenture Data Science Accelarator ##########
+########### Machine Learning Project ##############
+################## March 2019 #####################
 
-# Environnement prep
-####################
+# Environnement and data prep
+##############################
 
 rm(list=ls()) #Cleaning environment
 
 # Set working directory
-# setwd("/Users/raphaele/Documents/WIDS")
+setwd("/Users/raphaele/Documents/WIDS")
 
 # Load packages
 library(dplyr)
 library(caret)
 library(nnet)
+library(randomForest)
 
-# Load CSV file, once
+# Load the full CSV file, once
 PRODCOFull <- read.csv("red_team_clean_data_V1.csv")
 
 #Create the fitting data from the full data so we don't have to load the full CSV everytime
 PRODCOData <- PRODCOFull
 
-#Extract 20% of the dataset for model fitting/testing
-#SelectRows <- sample(1:nrow(PRODCOData), 0.2*nrow(PRODCOData))
-#PRODCOData <- PRODCOData[SelectRows, ]
-#nrow(PRODCOData)
+#View the structure of the data set
+str(PRODCOData)     #data.frame: 272911 obs. of 25 variables
+
+#Extract 1% of the dataset for model fitting/testing
+SelectRows <- sample(1:nrow(PRODCOData), 0.01*nrow(PRODCOData))
+PRODCOData <- PRODCOData[SelectRows, ]
+nrow(PRODCOData)
 
 #Check for any NA in the dataset
-any(is.na(PRODCOData))
+any(is.na(PRODCOData))      #Returns FALSE = no NA found
+
 # Remove any NAs if any
-PRODCOData <- na.omit(PRODCOData)
+#PRODCOData <- na.omit(PRODCOData)
 
 #check the dependent variable is categorical
-#str(PRODCOData$Result_Type)
+str(PRODCOData$Result_Type)   #Returns factor, which is ok
 
 #Look at the distribution of defects
-#summary(PRODCOData$Result_Type)
+summary(PRODCOData$Result_Type)
+#Returns:
+#Defect_1 Defect_2 Defect_3 Defect_4     PASS 
+#   2333     1625      838      499    21996 
 
 #Separate data into train and test
 #################################
 
 # 1 train the model on 70% of the data
 # 2 test the model on 30% of the data 
-# 3 compare actual with prediction to compute accuracy
 
-set.seed(42)
+#set.seed(42)
 trainingRows <- sample(1:nrow(PRODCOData), 0.7*nrow(PRODCOData))
 trainingPRODCOData <- PRODCOData[trainingRows, ]
 testPRODCOData <- PRODCOData[-trainingRows, ]
 
-#Preprocess data
+# Preprocess data
 ###################
 
-#Preprocess data with PCA and remove variable with zero variance
+# Preprocess data with PCA and remove variables with zero variance
 preProcValues <- preProcess(trainingPRODCOData, method = c("pca", "zv"))
 #Apply preProcessing to train and test data
 trainPCA <- predict(preProcValues, trainingPRODCOData)
 testPCA <- predict(preProcValues, testPRODCOData)
 
-#Train model on the processed training set, 70% of the data
+str(testPCA)      # Check the structure of the data after preprocessing
+
+# KNN
 #############
 
-# define training control with k-fold
-train_control <- trainControl(method = "cv", number = 5)
+#Train model on the processed training set, 70% of the data
+modelKNN <- train(Result_Type ~ . , trainPCA, "knn", tuneLength = 10)
 
-# train the model on training set
-# for parameters selection phase: drop them ome by one and check on execution time
-#system.time(modelMultiReg <- multinom(Result_Type ~ . -Date,
-#                                      data = trainPCA, maxit = 1000, MaxNWts=2000))
+#Use the model to predict QC result on test set
+PredmodelKNN <- predict(modelKNN,type="raw",newdata=testPCA)
 
-# train the model on training set
-modelMultiReg <- train(Result_Type ~ . -Date,
-               data = trainPCA,
-               trControl = train_control,
+# Output the stats and accurracy rate for KNN
+cat("Prediction statistics for KNN:")
+confusionMatrix(PredmodelKNN, testPCA$Result_Type)
+#Accuracy : 0.7998          
+
+
+#Multinomial regression 
+####################
+
+# Train the model on training set
+modelMultiReg <- train(Result_Type ~ . ,data = trainPCA,
                method = "multinom",maxit = 1000, MaxNWts=2000)
 
-#Predicting classification on test data, 30% of the data
-#################
-
-#use the model to predict QA on test set
-#type = raw to output class probability
+# Use the model to predict QA on test set
 PredmodelMultiReg <- predict(modelMultiReg,type="raw",newdata=testPCA)
-summary(PredmodelMultiReg)
 
-#storing output in a text file
-sink("model_output.txt")
-
-#Create confusion matrix to store results
-ResultMultiReg <- table(Predicted = PredmodelMultiReg, Actual = testPCA$Result_Type)
-cat("\n")
-cat("Result for test data per defect:")
-cat("\n")
-ResultMultiReg
-
-cat("\n")
-cat("Statistics associated to prediction results:")
-cat("\n")
+# Output the stats and accurracy rate
+cat("Prediction statistics for the multinomial regression:")
 confusionMatrix(PredmodelMultiReg, testPCA$Result_Type)
+# Accuracy : 0.8852   
+
+#Random forest
+######################
+
+# Train the model on training set
+modelRF <- randomForest(Result_Type ~ . , data=trainPCA)
+
+# Use the model to predict QA on test set
+PredmodelRF <- predict(modelRF,type="response",newdata=testPCA)
+
+# Output the stats and accurracy rate for RF
+cat("Prediction statistics for the multinomial regression:")
+confusionMatrix(PredmodelRF, testPCA$Result_Type)
+#Accuracy : 0.8791 
 
 
-cat("\n")
-cat("General confusion matrix for test data:")
-cat("\n")
 
-#Changing response into binary: defect / pass
-#In pred
-i <- 1
-PredmodelMultiRegGen <- as.character(PredmodelMultiReg)
-for (i in 1:length(PredmodelMultiRegGen)) {
-  if (PredmodelMultiRegGen[i] != "PASS") {PredmodelMultiRegGen[i] <- "DEFECT"}
-}
-#In test data
-i <- 1
-testPCA$Result_TypeGen <- as.character(testPCA$Result_Type)
-for (i in 1:length(testPCA$Result_TypeGen)) {
-  if (testPCA$Result_TypeGen[i] != "PASS") {testPCA$Result_TypeGen[i] <- "DEFECT"}
-}
+# Resetting the data set to its full size 
+#######################################
 
-#General confusion matrix
-ConfMat <- table(Predicted = PredmodelMultiRegGen, Actual = testPCA$Result_TypeGen)
-ConfMat
+# To be used for final model instead of the 2% that were used for testing
 
-# Accuracy rate of predictions
-AccRate <- (ResultMultiReg[1,1] + ResultMultiReg[2,2] + ResultMultiReg[3,3] + 
-              ResultMultiReg[4,4] + ResultMultiReg[5,5]) / nrow(testPCA)
-cat("\n")
-cat("Accuracy rate for this model is:", AccRate, "\n")
-
-PerError <- ConfMat[2,1] /(ConfMat[2,1]+ConfMat[2,2])*100
-cat("\n")
-cat("The percentage of defective items not tested is:", PerError, "\n")
+#Create the fitting data from the full data so we don't have to load the full CSV everytime
+PRODCOData <- PRODCOFull
 
 
-#Output for the client: list of items to test, that are likely to have a defect
-#change pred result from factor to character
-PredmodelMultiRegChar <- as.character(PredmodelMultiReg)
-#change SKU from factor to character
-SKUChar <- as.character(testPCA$SKU)
-#create a df with SKU and predicted QA test
-ClientOutput <- cbind(SKUChar, PredmodelMultiRegChar)
-#remove items with PASS from client output
-ClientOutput <- ClientOutput[ClientOutput[ ,2]!="PASS", ]
-#view client output
-colnames(ClientOutput) <- c("Item", "Test for:")
-#Print the list of items to test
-cat("\n")
-cat("Client output: SKU and items to test")
-cat("\n")
-head(ClientOutput, 15)
+#Separate full data into train and test
+#################################
 
-#Accuracy by SKU
-##################
-#All SKUs
-SKUOutput <- cbind(SKU=SKUChar, Actual = testPCA$Result_Type, Prediction = PredmodelMultiReg)
+# 1 train the model on 70% of the data
+# 2 test the model on 30% of the data 
 
-#Print list of items with cols: SKU, actual result, predicted result
-#cat("\n", "Output focussed on SKUs")
-#cat("\n", "list of items with cols: SKU, actual result, predicted result", "\n")
-#SKUOutput
+#set.seed(42)
+trainingRows <- sample(1:nrow(PRODCOData), 0.7*nrow(PRODCOData))
+trainingPRODCOData <- PRODCOData[trainingRows, ]
+testPRODCOData <- PRODCOData[-trainingRows, ]
 
-#Percentage to test
-#Compute total number of defects
-TotalDefect <- sum(SKUOutput[ ,3] != 5)
-PercToTest <- (TotalDefect*100) / nrow(SKUOutput)
-cat("\n", "The percentage of items to control in the test data set is: ", PercToTest, "\n")
+# Preprocess full data
+###################
 
+# Preprocess data with PCA and remove variables with zero variance
+preProcValues <- preProcess(trainingPRODCOData, method = c("pca", "zv"))
+#Apply preProcessing to train and test data
+trainPCA <- predict(preProcValues, trainingPRODCOData)
+testPCA <- predict(preProcValues, testPRODCOData)
 
-#Accuracy for SKU A001
+# Final model
+###################
 
-#Build a subset for A001 only
-A001Output <- SKUOutput[SKUOutput[ ,1]=="A001", ]
-ResultA001 <- table(A001Output[ ,3], A001Output[ ,2])
-#cat("\n","Confusion Matrix for A001:", "\n")
-#ResultA001
+# multinom after dropping parameters that would bring the accuracy below 90%
 
-# Accuracy rate of predictions
-A001AccRate <- (ResultA001[1,1] + ResultA001[2,5]) / nrow(A001Output)
-#cat("\n", "Accuracy rate for A001 is:", A001AccRate, "\n")
+# Fitting in training data
+modelMultiRegFinal <- multinom(Result_Type ~ 
+      SKU+path+PC1+PC2+PC3+PC4+PC5+PC6+PC7+PC8+PC9+PC10+PC11+PC12+PC13+PC14+PC15+PC16,
+      data = trainPCA, maxit = 1000, MaxNWts=2000)
 
-#Percentage to test for A001
-#Compute total number of defects
-TotalDefectA001 <- sum(A001Output[ ,3] != 5)
-PercToTestA001 <- (TotalDefectA001*100) / nrow(A001Output)
-cat("\n", "The percentage of A001 to control in the test data set is: ", PercToTestA001, "\n")
+# Prediction on test data
+PredmodelMultiRegFinal <- predict(modelMultiRegFinal,type="class",newdata=testPCA)
 
-#Accuracy for SKU B003
-
-#Build a subset for B003 only
-B003Output <- SKUOutput[SKUOutput[ ,1]=="B003", ]
-ResultB003 <- table(B003Output[ ,3], B003Output[ ,2])
-#cat("\n", "Confusion Matrix for B003:", "\n")
-#ResultB003
-
-# Accuracy rate of predictions
-B003AccRate <- (ResultB003[1,2] + ResultB003[2,5]) / nrow(B003Output)
-#cat("\n", "Accuracy rate for B003 is:", B003AccRate, "\n")
-
-#Percentage to test for B003
-#Compute total number of defects
-TotalDefectB003 <- sum(B003Output[ ,3] != 5)
-PercToTestB003 <- (TotalDefectB003*100) / nrow(B003Output)
-cat("\n", "The percentage of B003 to control in the test data set is: ", PercToTestB003, "\n")
-
-#Accuracy for SKU C005
-
-#Build a subset for C005 only
-C005Output <- SKUOutput[SKUOutput[ ,1]=="C005", ]
-ResultC005 <- table(C005Output[ ,3], C005Output[ ,2])
-#cat("\n", "Confusion Matrix for C005:", "\n")
-#ResultC005
-
-# Accuracy rate of predictions
-C005AccRate <- (ResultC005[1,2] + ResultC005[2,5]) / nrow(C005Output)
-#cat("\n", "Accuracy rate for C005 is:", C005AccRate, "\n")
-
-#Percentage to test for C005
-#Compute total number of defects
-TotalDefectC005 <- sum(C005Output[ ,3] != 5)
-PercToTestC005 <- (TotalDefectC005*100) / nrow(C005Output)
-cat("\n", "The percentage of C005 to control in the test data set is: ", PercToTestC005, "\n")
-
-#Accuracy for SKU X007
-
-#Build a subset for X007 only
-X007Output <- SKUOutput[SKUOutput[ ,1]=="X007", ]
-ResultX007 <- table(X007Output[ ,3], X007Output[ ,2])
-#cat("\n", "Confusion Matrix for X007:", "\n")
-#ResultX007
-
-# Accuracy rate of predictions
-X007AccRate <- (ResultX007[1,2] + ResultX007[2,5]) / nrow(X007Output)
-#cat("\n", "Accuracy rate for X007 is:", X007AccRate, "\n")
-
-#Percentage to test for X007
-#Compute total number of defects
-TotalDefectX007 <- sum(X007Output[ ,3] != 5)
-PercToTestX007 <- (TotalDefectX007*100) / nrow(X007Output)
-cat("\n", "The percentage of X007 to control in the test data set is: ", PercToTestX007, "\n")
-
-#Accuracy for SKU Z009
-
-#Build a subset for Z009 only
-Z009Output <- SKUOutput[SKUOutput[ ,1]=="Z009", ]
-ResultZ009 <- table(Z009Output[ ,3], Z009Output[ ,2])
-#cat("\n", "Confusion Matrix for Z009:", "\n")
-#ResultZ009
-
-# Accuracy rate of predictions
-Z009AccRate <- (ResultZ009[1,2] + ResultZ009[2,5]) / nrow(Z009Output)
-#cat("\n", "Accuracy rate for Z009 is:", Z009AccRate, "\n")
-
-#Percentage to test for Z009
-#Compute total number of defects
-TotalDefectZ009 <- sum(Z009Output[ ,3] != 5)
-PercToTestZ009 <- (TotalDefectZ009*100) / nrow(Z009Output)
-cat("\n", "The percentage of Z009 to control in the test data set is: ", PercToTestZ009, "\n")
-
-sink() #close the sink!!!
+# Output stats and accurracy of the model
+cat("Prediction statistics for the final model:")
+confusionMatrix(PredmodelMultiRegFinal, testPCA$Result_Type)
+#Accuracy : 0.8913 
