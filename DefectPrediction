@@ -39,7 +39,6 @@ any(is.na(PRODCOData))      #Returns FALSE = no NA found
 #check the dependent variable is categorical
 str(PRODCOData$Result_Type)   #Returns factor, which is ok
 
-
 #Look at the distribution of defects
 TableDefect <- table(PRODCOData$Result_Type)
 #Returns:
@@ -51,8 +50,7 @@ TableDefect <- as.data.frame(TableDefect)
 
 # Plot a bar chart for defect distribution
 ggplot(TableDefect, aes(x = Var1, y = Freq, fill = Var1)) + 
-  geom_col()
-
+  geom_col(show.legend = FALSE) + xlab("Quality control result") + ylab("Frequency")
 
 #Separate data into train and test
 #################################
