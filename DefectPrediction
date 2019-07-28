@@ -95,7 +95,7 @@ PredmodelMultiReg <- predict(modelMultiReg,type="raw",newdata=testPCA)
 # Output the stats and accurracy rate
 cat("Prediction statistics for the multinomial regression:")
 confusionMatrix(PredmodelMultiReg, testPCA$Result_Type)
-# Accuracy : 0.9152   
+# Accuracy : 0.8952   
 
 #Random forest
 ######################
@@ -158,4 +158,4 @@ PredmodelMultiRegFinal <- predict(modelMultiRegFinal,type="class",newdata=testPC
 # Output stats and accurracy of the model
 cat("Prediction statistics for the final model:")
 confusionMatrix(PredmodelMultiRegFinal, testPCA$Result_Type)
-#Accuracy : 0.9113 
+#Accuracy : 0.8913 
