@@ -1,0 +1,225 @@
+# Exploratory data analysis
+# Absenteeism at work data set
+# https://archive.ics.uci.edu/ml/datasets/Absenteeism+at+work
+
+
+# Load packages
+library(dplyr) # for all the %>% work
+library(ggplot2) # for ggplot
+library(gridExtra) # for grid.arrange
+library(RColorBrewer) # for stacked chart palettes
+library(GGally) # for scatter plot matrix
+
+# List of files in current directory
+list.files()
+
+# Load CSV file, once
+AbsenteeismOriginal <- read.csv("Absenteeism_at_work.csv")
+
+# Make a copy of the original data set, so any change doesn't affect the original
+AbsenteeismData <- AbsenteeismOriginal  # Analysis to be done on AbsenteeismData
+
+# Global view of the data set structure
+glimpse(AbsenteeismData)
+# 740 observations
+# 21 variables
+
+# Change 8 variables to a factor type
+AbsenteeismData$Reason.for.absence <- as.factor(AbsenteeismData$Reason.for.absence)
+AbsenteeismData$Month.of.absence <- as.factor(AbsenteeismData$Month.of.absence)
+AbsenteeismData$Day.of.the.week  <- as.factor(AbsenteeismData$Day.of.the.week )
+AbsenteeismData$Seasons <- as.factor(AbsenteeismData$Seasons)
+AbsenteeismData$Disciplinary.failure <- as.factor(AbsenteeismData$Disciplinary.failure)
+AbsenteeismData$Education <- as.factor(AbsenteeismData$Education)
+AbsenteeismData$Social.drinker <- as.factor(AbsenteeismData$Social.drinker)
+AbsenteeismData$Social.smoker <- as.factor(AbsenteeismData$Social.smoker)
+
+
+# Reason for absence
+###############################################
+
+
+levels(AbsenteeismData$Reason.for.absence)
+summary(AbsenteeismData$Reason.for.absence)
+
+head(AbsenteeismData$Reason.for.absence)
+
+# Merge some values of reason for absence
+# Unjustified and unknown
+AbsenteeismData <- AbsenteeismData %>% 
+  mutate(Reason.for.absence = replace(Reason.for.absence, Reason.for.absence == 26, 0))
+
+# Other symptoms and factors
+AbsenteeismData <- AbsenteeismData %>% 
+  mutate(Reason.for.absence = replace(Reason.for.absence, Reason.for.absence == 18, 21))
+
+# Pregnancy, childbirth and perinatal
+AbsenteeismData <- AbsenteeismData %>% 
+  mutate(Reason.for.absence = replace(Reason.for.absence, Reason.for.absence == 15, 16))
+
+# Ear and eye diseases
+AbsenteeismData <- AbsenteeismData %>% 
+  mutate(Reason.for.absence = replace(Reason.for.absence, Reason.for.absence == 7, 8))
+
+# Circulatory and blood diseases
+AbsenteeismData <- AbsenteeismData %>% 
+  mutate(Reason.for.absence = replace(Reason.for.absence, Reason.for.absence == 9, 3))
+
+# Skin and neoplasms
+AbsenteeismData <- AbsenteeismData %>% 
+  mutate(Reason.for.absence = replace(Reason.for.absence, Reason.for.absence == 2, 12))
+
+# Change factor level names to make it easier to read
+levels(AbsenteeismData$Reason.for.absence) <- c("Unknown", "Infectious and parasitic", "Neoplasms",  
+                                                "Circulatory and blood", "Endocrine and metabolic",   
+                                                "Mental and behavioural", "Nervous system",   
+                                                "Eye and adnexa", "Ear and eye",  
+                                                "Circulatory system", "Respiratory system", 
+                                                "Digestive system", "Skin and neoplasms",
+                                                "Musculoskeletal system", "Genitourinary system",
+                                                "Pregnancy and childbirth", "Pregnancy and perinatal",
+                                                "Congenital and chromosomal",   
+                                                "Symptoms and clinical findings",   
+                                                "Injury and external causes",
+                                                "Other symptoms and factors", 
+                                                "Patient follow-up", "Medical consultation", "Blood donation", 
+                                                "Laboratory examination", "Unjustified absence", "Physiotherapy", 
+                                                "Dental consultation")
+
+# Remove factor levels with 0 observations
+AbsenteeismData$Reason.for.absence <- droplevels(AbsenteeismData$Reason.for.absence)
+
+# Check the level names and count of the updated data set
+summary(AbsenteeismData$Reason.for.absence)
+
+# Plot of frequency for each reason for absence
+ggplot(AbsenteeismData, aes(x = Reason.for.absence)) + 
+  geom_bar(fill = "#42a0cf", color ="#42a0cf") +
+  coord_flip() +
+  labs( x = "Reason for absence", y = "Count")
+
+# Time related variables: day, month and season
+###############################################
+
+# View factor variables with missing values
+summary(AbsenteeismData$Month.of.absence) # 3 values = 0
+summary(AbsenteeismData$Day.of.the.week) # no missing values
+summary(AbsenteeismData$Seasons) # no missing values
+
+# Remove observations where Month.of.absence = 0
+AbsenteeismData <- AbsenteeismData %>%
+  filter(Month.of.absence != "0") %>%
+  droplevels()
+# The data set has now 737 Observations
+
+# Check the level names for month, day and season variables
+levels(AbsenteeismData$Month.of.absence)
+levels(AbsenteeismData$Day.of.the.week)
+levels(AbsenteeismData$Seasons)
+
+# Change level names for month, day and season variables
+# to something more meaningful
+levels(AbsenteeismData$Month.of.absence) <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+levels(AbsenteeismData$Day.of.the.week) <- c("Mon", "Tue", "Wed", "Thu", "Fri")
+levels(AbsenteeismData$Seasons) <- c("Summer", "Autumn", "Winter", "Spring")
+
+# Plot of frequency for each month of absence
+plotSeason <- ggplot(AbsenteeismData, aes(x = Month.of.absence)) + 
+  geom_bar(fill = "#9fbf58", color ="#9fbf58") + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs( x = NULL, y = NULL)
+
+# Plot of frequency for each day of the week
+plotDay <- ggplot(AbsenteeismData, aes(x = Day.of.the.week)) + 
+  geom_bar(fill = "#f7a34f", color ="#f7a34f") + 
+  labs( x = NULL, y = NULL)
+
+# Plot of frequency for each season
+plotMonth <- ggplot(AbsenteeismData, aes(x = Seasons)) + 
+  geom_bar(fill = "#ab79b8", color ="#ab79b8") + 
+  labs( x = NULL, y = NULL)
+
+# Display the 3 plots above on the same line
+grid.arrange(plotSeason, plotDay, plotMonth, nrow=1, ncol=3)
+
+# Time Related Variables and Reasons for Absence
+###############################################
+
+# Plot of frequency for each month of absence with reason for absence
+ggplot(data = AbsenteeismData, aes(x = Month.of.absence)) +
+  geom_bar(aes(fill = Reason.for.absence), position = "fill") +
+  theme(legend.position = "bottom", 
+        legend.title = element_blank(),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, "cm")) +
+  labs( x = NULL, y = NULL) 
+
+# Plot of frequency for each day of the week with reason for absence
+ggplot(data = AbsenteeismData, aes(x = Day.of.the.week)) +
+  geom_bar(aes(fill = Reason.for.absence), position = "fill") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, "cm")) +
+  labs( x = NULL, y = NULL)
+
+# Plot of frequency for each season with reason for absence
+ggplot(data = AbsenteeismData, aes(x = Seasons)) +
+  geom_bar(aes(fill = Reason.for.absence), position = "fill") +
+  theme(legend.position = "bottom", 
+        legend.title = element_blank(),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, "cm")) +
+  labs( x = NULL, y = NULL)
+
+
+# Other variables - categorical
+###############################################
+
+# View other factor variables with missing values
+summary(AbsenteeismData$Disciplinary.failure)
+summary(AbsenteeismData$Education)
+summary(AbsenteeismData$Social.drinker)
+summary(AbsenteeismData$Social.smoker)
+
+# Bar chart of education and reason of absence
+ggplot(AbsenteeismData, aes(x = Reason.for.absence)) + 
+  geom_bar(aes(fill = Education), position = "fill") +
+  coord_flip() +
+  labs( x = NULL, y = NULL) +
+  scale_fill_brewer(palette="Accent")
+
+# Bar chart of Social.drinker and reason of absence
+ggplot(AbsenteeismData, aes(x = Reason.for.absence)) + 
+  geom_bar(aes(fill = Social.drinker), position = "fill") +
+  coord_flip() +
+  labs( x = NULL, y = NULL) +
+  scale_fill_brewer(palette="Accent")
+
+# Bar chart of Social.smoker and reason of absence
+ggplot(AbsenteeismData, aes(x = Reason.for.absence)) + 
+  geom_bar(aes(fill = Social.smoker), position = "fill") +
+  coord_flip() +
+  labs( x = NULL, y = NULL) +
+  scale_fill_brewer(palette="Accent")
+
+
+# Other variables - continuous
+###############################################
+
+# Subset of the data with continuous variables only
+AbsenteeismDataContinuous <- AbsenteeismData[ , c(6:11, 14, 17:21)]
+
+# Scatter plot matrix with all continuous variables
+ggpairs(AbsenteeismDataContinuous)
+
+# Update AbsenteeismDataContinuous to remove 4 variables with little correlation
+AbsenteeismDataContinuous <- AbsenteeismDataContinuous[ , c(1:4, 8:11)]
+
+# Correaltion matrix
+ggcorr(AbsenteeismDataContinuous, nbreaks = 5, min_size = 0, max_size = 9,
+       low = "#9fbf58", 
+       mid = "#f9f9f9", high = "#ab79b8", label = TRUE, hjust = 0.85, color = "grey40",
+       size = 3, label_size = 3, label_color = "#444444",
+       label_round = 2, label_alpha = FALSE, layout.exp = 2) 
